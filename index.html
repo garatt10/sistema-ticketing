@@ -1,9 +1,21 @@
+¡Claro que sí! Aquí tienes el código completo y definitivo de la **versión 9**.
+
+Esta es la versión más estable y robusta que hemos desarrollado. Soluciona el problema de la "pantalla negra" asegurándose de que el video de la cámara se reproduzca correctamente antes de intentar escanear, y también incluye el manejo de errores de permisos y la funcionalidad de linterna y cambio de cámara.
+
+**Instrucciones clave:**
+1.  Copia todo el código de abajo y pégalo en un archivo llamado `index.html` (o el nombre que prefieras).
+2.  Sube este archivo a un servicio de hosting que te proporcione una **URL segura `https://`** (como Netlify, Vercel o GitHub Pages).
+3.  Abre esa URL `https://` en tu teléfono móvil para probarlo.
+
+### **Código Completo: `qr_validator_v9.html`**
+
+```html
 <!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-    <title>Validador de Tickets v8</title>
+    <title>Validador de Tickets v9</title>
     <script src="https://unpkg.com/@zxing/library@0.20.0"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
     <style>
@@ -95,21 +107,15 @@
         </div>
 
         <div id="scanner-view">
-            <video id="video" autoplay playsinline></video>
+            <video id="video" playsinline></video>
             <div class="overlay">
-                <div class="scan-region">
-                    <div class="scan-box"><div class="scan-line"></div></div>
-                </div>
+                <div class="scan-region"><div class="scan-box"><div class="scan-line"></div></div></div>
                 <div class="bottom-panel">
                     <div class="controls">
                         <button id="flash-btn" class="control-btn"><svg viewBox="0 0 24 24"><path d="M13 3h-2v10h2V3zm4.12 2.46l-1.42 1.42A6.995 6.995 0 0 0 12 5c-3.87 0-7 3.13-7 7s3.13 7 7 7a6.995 6.995 0 0 0 4.58-1.88l1.42 1.42A8.962 8.962 0 0 1 12 21a9 9 0 1 1 9-9c0 1.93-.63 3.68-1.66 5.12l-1.42-1.42A6.953 6.953 0 0 0 19 12c0-2.43-1.23-4.57-3.12-5.88z"/></svg></button>
                         <button id="switch-cam-btn" class="control-btn"><svg viewBox="0 0 24 24"><path d="M9.83 2.17 7.41 4.59 9.83 7l-1.42 1.41L6 6l-2.41 2.41L2.17 7 4.59 4.59 2.17 2.17 3.59 0.76l6.24 6.24zM12 4c-3.87 0-7 3.13-7 7s3.13 7 7 7 7-3.13 7-7-3.13-7-7-7zm0 12c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5z"/><path d="m20.41 15.59-2.42-2.42L20.41 10.75l-1.41-1.41L16.59 11.75l-2.41-2.41-1.41 1.41L15.17 13.17l-2.41 2.41 1.41 1.41L16.59 14.59l2.41 2.41z"/></svg></button>
                     </div>
-                    <div id="result-panel">
-                        <h3 id="result-status"></h3>
-                        <div id="result-data"></div>
-                        <button id="rescan-btn">Escanear Otro</button>
-                    </div>
+                    <div id="result-panel"><h3 id="result-status"></h3><div id="result-data"></div><button id="rescan-btn">Escanear Otro</button></div>
                 </div>
             </div>
         </div>
@@ -147,35 +153,35 @@
 
         async function initScanner() {
             errorMessage.style.display = 'none';
-
             if (location.protocol !== 'https:') {
                 displayError('Error: Esta página debe usar una conexión segura (HTTPS).');
                 return;
             }
 
-            app.isScanning = true;
             try {
-                // 1. Pedir permiso y obtener el stream de video
                 const constraints = { video: { facingMode: { ideal: 'environment' } } };
                 app.stream = await navigator.mediaDevices.getUserMedia(constraints);
+                
                 video.srcObject = app.stream;
                 
-                startScreen.style.display = 'none';
-                scannerView.style.display = 'block';
-                
-                // 2. Ahora que tenemos permiso, habilitar los controles avanzados
-                await enableAdvancedControls();
+                video.onloadedmetadata = () => {
+                    video.play().catch(e => console.error("Fallo al reproducir video:", e));
+                    
+                    startScreen.style.display = 'none';
+                    scannerView.style.display = 'block';
+                    app.isScanning = true;
+                    enableAdvancedControls();
+                    decodeFromStream();
+                };
 
-                // 3. Iniciar el bucle de decodificación
-                decodeFromStream();
             } catch (err) {
                 console.error("ERROR AL INICIAR CÁMARA:", err);
                 if (err.name === 'NotAllowedError') {
-                    displayError('Permiso denegado. Revisa los permisos de la cámara para este sitio en los ajustes de tu navegador.');
+                    displayError('Permiso denegado. Revisa los permisos de la cámara para este sitio.');
                 } else if (err.name === 'NotFoundError' || err.name === 'OverconstrainedError') {
-                    displayError('No se encontró una cámara compatible en tu dispositivo.');
+                    displayError('No se encontró una cámara compatible.');
                 } else {
-                    displayError(`Error de cámara: ${err.name}. Asegúrate de usar HTTPS y que ninguna otra app esté usando la cámara.`);
+                    displayError(`Error de cámara: ${err.name}. Usa HTTPS.`);
                 }
             }
         }
@@ -210,7 +216,7 @@
                     }
                 } catch (error) {
                     if (!(error instanceof ZXing.NotFoundException)) {
-                        console.error("Error de decodificación:", error);
+                        // Ignore "not found" errors, which happen constantly.
                     }
                 }
             }
@@ -276,7 +282,10 @@
             if (vibrations[type]) navigator.vibrate?.(vibrations[type]);
         }
 
-        function escapeHTML(str) { return str.replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+        function escapeHTML(str) {
+            if (!str) return '';
+            return str.replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+        }
 
         async function switchCamera() {
             if (app.videoDevices.length <= 1) return;
@@ -292,8 +301,12 @@
                 const newConstraints = { video: { deviceId: { exact: deviceId } } };
                 app.stream = await navigator.mediaDevices.getUserMedia(newConstraints);
                 video.srcObject = app.stream;
-                app.isScanning = true;
-                decodeFromStream();
+                
+                video.onloadedmetadata = () => {
+                    video.play();
+                    app.isScanning = true;
+                    decodeFromStream();
+                };
             } catch (err) {
                 displayError(`Error al cambiar de cámara: ${err.name}`);
             }
