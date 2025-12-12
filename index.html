@@ -5,10 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>Validador de Tickets</title>
 
-    <!-- Fuente moderna -->
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;600&display=swap" rel="stylesheet">
-
-    <!-- ZXing QR Reader -->
     <script src="https://unpkg.com/@zxing/library@0.19.1"></script>
 
     <style>
@@ -58,10 +55,19 @@
             border: 1px solid rgba(255,255,255,0.15);
         }
 
+        #user-info {
+            margin-top: 16px;
+            padding: 14px;
+            background: rgba(0,0,0,0.35);
+            border-radius: 12px;
+            border: 1px solid rgba(255,255,255,0.12);
+            display: none;
+        }
+
         .success { color: #4dff9a; font-weight: 600; }
         .error { color: #ff4d4d; font-weight: 600; }
 
-        #rescan {
+        #rescan, #flashBtn {
             width: 100%;
             margin-top: 18px;
             padding: 14px;
@@ -70,8 +76,13 @@
             font-size: 1rem;
             color: white;
             border-radius: 14px;
-            display: none;
             cursor: pointer;
+            display: none;
+        }
+
+        #flashBtn {
+            background: rgba(255,255,255,0.18);
+            backdrop-filter: blur(10px);
         }
     </style>
 </head>
@@ -82,6 +93,8 @@
     <div id="scanner-box">
         <video id="video" autoplay playsinline></video>
         <div id="status">Apuntá al código QR para validar</div>
+        <div id="user-info"></div>
+        <button id="flashBtn">Activar Linterna</button>
         <button id="rescan">Escanear otro</button>
     </div>
 
@@ -91,10 +104,14 @@
         const video = document.getElementById("video");
         const statusBox = document.getElementById("status");
         const rescanBtn = document.getElementById("rescan");
+        const flashBtn = document.getElementById("flashBtn");
+        const userBox = document.getElementById("user-info");
 
         const codeReader = new ZXing.BrowserQRCodeReader();
         let scanning = true;
         let currentStream = null;
+        let torchOn = false;
+        let track = null;
 
         async function startCamera() {
             try {
@@ -104,9 +121,15 @@
                 currentStream = await navigator.mediaDevices.getUserMedia({
                     video: {
                         deviceId: cam.deviceId,
-                        facingMode: "environment"
+                        facingMode: "environment",
+                        advanced: [{ torch: false }]
                     }
                 });
+
+                track = currentStream.getVideoTracks()[0];
+                const capabilities = track.getCapabilities();
+
+                if (capabilities.torch) flashBtn.style.display = "block";
 
                 video.srcObject = currentStream;
                 decode();
@@ -116,16 +139,26 @@
             }
         }
 
+        async function toggleFlash() {
+            if (!track) return;
+            try {
+                torchOn = !torchOn;
+                await track.applyConstraints({ advanced: [{ torch: torchOn }] });
+                flashBtn.textContent = torchOn ? "Apagar Linterna" : "Activar Linterna";
+            } catch (err) {
+                alert("Tu dispositivo no soporta la linterna en modo cámara.");
+            }
+        }
+
         async function decode() {
             if (!scanning) return;
 
             try {
                 const result = await codeReader.decodeOnceFromVideoDevice(undefined, "video");
-
                 scanning = false;
                 navigator.vibrate?.(120);
 
-                statusBox.textContent = "⏳ Enviando validación...";
+                statusBox.textContent = "⏳ Validando...";
                 sendToWebhook(result.text);
 
             } catch (e) {
@@ -141,11 +174,21 @@
                     body: JSON.stringify({ Token: token })
                 });
 
+                const data = await res.json();
+
                 if (res.ok) {
-                    statusBox.textContent = "✔ Ticket validado correctamente";
+                    statusBox.textContent = "✔ Ticket validado";
                     statusBox.classList.add("success");
+
+                    userBox.style.display = "block";
+                    userBox.innerHTML = `
+                        <strong>Nombre:</strong> ${data.nombre || "-"}<br>
+                        <strong>Tipo Entrada:</strong> ${data.tipo || "-"}<br>
+                        <strong>Estado:</strong> ${data.estado || "-"}
+                    `;
+
                 } else {
-                    statusBox.textContent = "❌ El servidor devolvió un error";
+                    statusBox.textContent = "❌ Error en servidor";
                     statusBox.classList.add("error");
                 }
 
@@ -162,9 +205,12 @@
             scanning = true;
             statusBox.textContent = "Apuntá al código QR para validar";
             statusBox.classList.remove("success", "error");
+            userBox.style.display = "none";
             rescanBtn.style.display = "none";
             decode();
         };
+
+        flashBtn.onclick = toggleFlash;
 
         startCamera();
     </script>
