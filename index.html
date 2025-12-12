@@ -149,113 +149,123 @@
 
   <script>
     const video = document.getElementById("video");
-    const statusBox = document.getElementById("status");
-    const rescanBtn = document.getElementById("rescan");
-    const switchBtn = document.getElementById("switchCamera");
+  const statusBox = document.getElementById("status");
+  const rescanBtn = document.getElementById("rescan");
+  const switchBtn = document.getElementById("switchCamera");
 
-    /* 🔥 Acá colocás tu Webhook */
-    const webhookURL = "https://garatt10.app.n8n.cloud/webhook-test/752561a4-b0f1-4dde-9b89-e751f818313b";
+  const webhookURL = "AQUI_TU_WEBHOOK";
 
-    let scanning = true;
-    let currentStream = null;
-    let currentCameraIndex = 0;
-    let cameras = [];
+  let scanning = false;
+  let stream = null;
+  let cameras = [];
+  let currentCamera = 0;
 
-    async function loadCameras() {
-      const devices = await navigator.mediaDevices.enumerateDevices();
-      cameras = devices.filter(d => d.kind === "videoinput");
+  // 🔍 Escanear QR
+  function scanFrame() {
+    if (!scanning) return;
+
+    const w = video.videoWidth;
+    const h = video.videoHeight;
+
+    if (w === 0 || h === 0) {
+      requestAnimationFrame(scanFrame);
+      return;
     }
 
-    async function startCamera(index = 0) {
-      if (currentStream) currentStream.getTracks().forEach(t => t.stop());
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d");
 
-      currentCameraIndex = index % cameras.length;
-      const camera = cameras[currentCameraIndex];
+    canvas.width = w;
+    canvas.height = h;
 
-      currentStream = await navigator.mediaDevices.getUserMedia({
-        video: { deviceId: camera.deviceId, facingMode: "environment" }
+    ctx.drawImage(video, 0, 0, w, h);
+
+    const imgData = ctx.getImageData(0, 0, w, h);
+    const qr = jsQR(imgData.data, w, h, { inversionAttempts: "attemptBoth" });
+
+    if (qr) {
+      scanning = false;
+      navigator.vibrate?.(150);
+      statusBox.textContent = "⏳ Validando...";
+      sendToWebhook(qr.data);
+      return;
+    }
+
+    requestAnimationFrame(scanFrame);
+  }
+
+  // 📡 Enviar token
+  async function sendToWebhook(value) {
+    try {
+      const res = await fetch(webhookURL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ Token: value })
       });
 
-      video.srcObject = currentStream;
-      setTimeout(() => requestAnimationFrame(tick), 300);
-    }
+      const txt = await res.text();
 
-    /* 🔍 Scanner QR */
-    function tick() {
-      if (!scanning) return;
-
-      const canvas = document.createElement("canvas");
-      const ctx = canvas.getContext("2d");
-
-      canvas.width = video.videoWidth * 0.6;
-      canvas.height = video.videoHeight * 0.6;
-
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-      const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      const qr = jsQR(img.data, canvas.width, canvas.height);
-
-      if (qr) {
-        scanning = false;
-        navigator.vibrate?.(150);
-
-        statusBox.textContent = "⏳ Validando...";
-        statusBox.classList.remove("success", "error");
-
-        sendToWebhook(qr.data);
-        return;
-      }
-
-      setTimeout(() => requestAnimationFrame(tick), 210);
-    }
-
-    /* 📡 Enviar token al Webhook */
-    async function sendToWebhook(tokenContent) {
-      try {
-        const res = await fetch(webhookURL, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ Token: tokenContent })
-        });
-
-        const text = await res.text();
-
-        if (res.ok) {
-          statusBox.textContent = "✔ " + text;
-          statusBox.classList.add("success");
-          rescanBtn.style.display = "block";
-        } else {
-          statusBox.textContent = "❌ " + text;
-          statusBox.classList.add("error");
-        }
-      } catch (error) {
-        statusBox.textContent = "❌ No hay conexión con el servidor";
+      if (res.ok) {
+        statusBox.textContent = "✔ " + txt;
+        statusBox.classList.add("success");
+        rescanBtn.style.display = "block";
+      } else {
+        statusBox.textContent = "❌ " + txt;
         statusBox.classList.add("error");
       }
+
+    } catch (e) {
+      statusBox.textContent = "❌ No se pudo conectar al servidor";
+      statusBox.classList.add("error");
     }
+  }
 
-    /* 🔄 Re-escanear */
-    rescanBtn.onclick = () => {
-      scanning = true;
-      rescanBtn.style.display = "none";
-      statusBox.textContent = "Apuntá al código QR para validar";
-      statusBox.classList.remove("success", "error");
-      requestAnimationFrame(tick);
-    };
+  // 🎥 Iniciar cámara
+  async function startCamera(index = 0) {
+    if (stream) stream.getTracks().forEach(t => t.stop());
 
-    /* 📷 Cambiar cámara */
-    switchBtn.onclick = async () => {
-      if (cameras.length > 1) {
-        await startCamera(currentCameraIndex + 1);
+    currentCamera = index % cameras.length;
+    const cam = cameras[currentCamera];
+
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: {
+        deviceId: cam.deviceId,
+        width: { ideal: 1280 },
+        height: { ideal: 720 }
       }
-    };
+    });
 
-    /* ▶ Iniciar */
-    (async () => {
-      await loadCameras();
-      if (cameras.length > 1) switchBtn.style.display = "block";
-      await startCamera();
-    })();
+    video.srcObject = stream;
+
+    video.onloadeddata = () => {
+      scanning = true;
+      requestAnimationFrame(scanFrame);
+    };
+  }
+
+  // 📷 Cambiar cámara
+  switchBtn.onclick = () => {
+    if (cameras.length > 1) startCamera(currentCamera + 1);
+  };
+
+  // 🔁 Re-escanear
+  rescanBtn.onclick = () => {
+    rescanBtn.style.display = "none";
+    statusBox.classList.remove("success", "error");
+    statusBox.textContent = "Apuntá al código QR para validar";
+    scanning = true;
+    requestAnimationFrame(scanFrame);
+  };
+
+  // ▶ Iniciar app
+  (async () => {
+    const devs = await navigator.mediaDevices.enumerateDevices();
+    cameras = devs.filter(d => d.kind === "videoinput");
+
+    if (cameras.length > 1) switchBtn.style.display = "block";
+
+    await startCamera();
+  })();
   </script>
 
 </body>
