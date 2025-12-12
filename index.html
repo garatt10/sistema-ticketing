@@ -1,272 +1,173 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <title>Validación de Tickets</title>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>Validador de Tickets</title>
 
-  <!-- Tipografía Premium -->
-  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;600&display=swap" rel="stylesheet">
+    <!-- Fuente moderna -->
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;600&display=swap" rel="stylesheet">
 
-  <style>
-    :root {
-      --primary1: #5d3fff;
-      --primary2: #00c3ff;
-    }
+    <!-- ZXing QR Reader -->
+    <script src="https://unpkg.com/@zxing/library@0.19.1"></script>
 
-    body {
-      margin: 0;
-      font-family: "Space Grotesk", sans-serif;
-      background: radial-gradient(circle at top, #1a1b27, #0c0c0e 70%);
-      color: #fff;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      padding: 20px;
-      height: 100dvh;
-      overflow: hidden;
-      position: relative;
-    }
+    <style>
+        body {
+            margin: 0;
+            background: radial-gradient(circle at top, #1b1c29, #0b0c0e 70%);
+            color: #fff;
+            font-family: "Space Grotesk", sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+            height: 100dvh;
+            overflow: hidden;
+        }
 
-    /* Fondos difusos */
-    .bg1, .bg2 {
-      position: absolute;
-      width: 550px;
-      height: 550px;
-      filter: blur(120px);
-      z-index: -1;
-      opacity: 0.9;
-    }
-    .bg1 { background: radial-gradient(circle, rgba(93, 63, 255, 0.6), transparent); top: -100px; right: -150px; }
-    .bg2 { background: radial-gradient(circle, rgba(0,195,255,0.4), transparent); bottom: -120px; left: -150px; }
+        h1 {
+            margin-top: 10px;
+            font-size: 1.7rem;
+            font-weight: 600;
+            text-align: center;
+        }
 
-    /* Header */
-    header { padding-top: 10px; text-align: center; }
-    h1 { font-size: 2rem; margin: 0; font-weight: 600; }
-    h2 { font-size: 1rem; opacity: 0.7; margin-top: 5px; }
+        #scanner-box {
+            width: 100%;
+            max-width: 420px;
+            background: rgba(255,255,255,0.08);
+            padding: 16px;
+            border-radius: 18px;
+            border: 1px solid rgba(255,255,255,0.15);
+            backdrop-filter: blur(14px);
+            margin-top: 20px;
+        }
 
-    /* Caja principal */
-    #camera-box {
-      width: 100%;
-      max-width: 440px;
-      background: rgba(255,255,255,0.06);
-      padding: 18px;
-      border-radius: 22px;
-      backdrop-filter: blur(16px);
-      border: 1px solid rgba(255,255,255,0.12);
-      box-shadow: 0 0 40px rgba(0,0,0,0.35);
-      margin-top: 20px;
-      position: relative;
-    }
+        video {
+            width: 100%;
+            border-radius: 14px;
+            background: #000;
+        }
 
-    /* Glow exterior */
-    #camera-box::before {
-      content: "";
-      position: absolute;
-      inset: -3px;
-      border-radius: inherit;
-      background: linear-gradient(135deg, var(--primary1), var(--primary2));
-      filter: blur(18px);
-      opacity: .55;
-      z-index: -1;
-      animation: glow 3s ease-in-out infinite alternate;
-    }
+        #status {
+            margin-top: 12px;
+            padding: 12px;
+            text-align: center;
+            background: rgba(255,255,255,0.06);
+            border-radius: 10px;
+            border: 1px solid rgba(255,255,255,0.15);
+        }
 
-    @keyframes glow { 0% { opacity:.3; } 100% { opacity:.85; } }
+        .success { color: #4dff9a; font-weight: 600; }
+        .error { color: #ff4d4d; font-weight: 600; }
 
-    video {
-      width: 100%;
-      border-radius: 16px;
-      background: #000;
-    }
-
-    #status {
-      margin-top: 16px;
-      background: rgba(0,0,0,0.35);
-      padding: 15px;
-      border-radius: 12px;
-      text-align: center;
-      border: 1px solid rgba(255,255,255,0.1);
-      font-size: 1.05rem;
-    }
-
-    .success { color: #37ff8b; }
-    .error { color: #ff5f5f; }
-
-    /* Botones */
-    #controls {
-      margin-top: 18px;
-      display: flex;
-      justify-content: space-between;
-      gap: 10px;
-    }
-
-    button {
-      flex: 1;
-      padding: 12px;
-      border: none;
-      border-radius: 14px;
-      font-size: 1rem;
-      font-weight: 600;
-      color: white;
-      background: linear-gradient(135deg, var(--primary1), var(--primary2));
-      cursor: pointer;
-      display: none;
-      transition: 0.25s;
-    }
-
-    button:active { transform: scale(0.95); }
-
-    #switchCamera {
-      background: rgba(255,255,255,0.12);
-      backdrop-filter: blur(8px);
-    }
-
-  </style>
+        #rescan {
+            width: 100%;
+            margin-top: 18px;
+            padding: 14px;
+            background: linear-gradient(135deg,#5d3fff,#00c3ff);
+            border: none;
+            font-size: 1rem;
+            color: white;
+            border-radius: 14px;
+            display: none;
+            cursor: pointer;
+        }
+    </style>
 </head>
 <body>
 
-  <div class="bg1"></div>
-  <div class="bg2"></div>
+    <h1>Validación de Tickets<br>Automatizaciones con IA</h1>
 
-  <header>
-    <h1>Validación de Tickets</h1>
-    <h2>Automatizaciones con IA</h2>
-  </header>
-
-  <div id="camera-box">
-    <video id="video" autoplay muted playsinline></video>
-    <div id="status">Apuntá al código QR para validar</div>
-
-    <div id="controls">
-      <button id="rescan">Escanear otro</button>
-      <button id="switchCamera">Cambiar cámara</button>
+    <div id="scanner-box">
+        <video id="video" autoplay playsinline></video>
+        <div id="status">Apuntá al código QR para validar</div>
+        <button id="rescan">Escanear otro</button>
     </div>
-  </div>
 
-  <!-- Librería QR -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jsqr/1.4.0/jsQR.min.js"></script>
+    <script>
+        const webhookURL = "https://garatt10.app.n8n.cloud/webhook-test/752561a4-b0f1-4dde-9b89-e751f818313b";
 
-  <script>
-    const video = document.getElementById("video");
-  const statusBox = document.getElementById("status");
-  const rescanBtn = document.getElementById("rescan");
-  const switchBtn = document.getElementById("switchCamera");
+        const video = document.getElementById("video");
+        const statusBox = document.getElementById("status");
+        const rescanBtn = document.getElementById("rescan");
 
-  const webhookURL = "https://garatt10.app.n8n.cloud/webhook-test/752561a4-b0f1-4dde-9b89-e751f818313b";
+        const codeReader = new ZXing.BrowserQRCodeReader();
+        let scanning = true;
+        let currentStream = null;
 
-  let scanning = false;
-  let stream = null;
-  let cameras = [];
-  let currentCamera = 0;
+        async function startCamera() {
+            try {
+                const devices = await navigator.mediaDevices.enumerateDevices();
+                const cam = devices.find(d => d.kind === "videoinput");
 
-  // 🔍 Escanear QR
-  function scanFrame() {
-    if (!scanning) return;
+                currentStream = await navigator.mediaDevices.getUserMedia({
+                    video: {
+                        deviceId: cam.deviceId,
+                        facingMode: "environment"
+                    }
+                });
 
-    const w = video.videoWidth;
-    const h = video.videoHeight;
+                video.srcObject = currentStream;
+                decode();
+            } catch (err) {
+                statusBox.textContent = "❌ No se pudo acceder a la cámara.";
+                statusBox.classList.add("error");
+            }
+        }
 
-    if (w === 0 || h === 0) {
-      requestAnimationFrame(scanFrame);
-      return;
-    }
+        async function decode() {
+            if (!scanning) return;
 
-    const canvas = document.createElement("canvas");
-    const ctx = canvas.getContext("2d");
+            try {
+                const result = await codeReader.decodeOnceFromVideoDevice(undefined, "video");
 
-    canvas.width = w;
-    canvas.height = h;
+                scanning = false;
+                navigator.vibrate?.(120);
 
-    ctx.drawImage(video, 0, 0, w, h);
+                statusBox.textContent = "⏳ Enviando validación...";
+                sendToWebhook(result.text);
 
-    const imgData = ctx.getImageData(0, 0, w, h);
-    const qr = jsQR(imgData.data, w, h, { inversionAttempts: "attemptBoth" });
+            } catch (e) {
+                requestAnimationFrame(decode);
+            }
+        }
 
-    if (qr) {
-      scanning = false;
-      navigator.vibrate?.(150);
-      statusBox.textContent = "⏳ Validando...";
-      sendToWebhook(qr.data);
-      return;
-    }
+        async function sendToWebhook(token) {
+            try {
+                const res = await fetch(webhookURL, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ Token: token })
+                });
 
-    requestAnimationFrame(scanFrame);
-  }
+                if (res.ok) {
+                    statusBox.textContent = "✔ Ticket validado correctamente";
+                    statusBox.classList.add("success");
+                } else {
+                    statusBox.textContent = "❌ El servidor devolvió un error";
+                    statusBox.classList.add("error");
+                }
 
-  // 📡 Enviar token
-  async function sendToWebhook(value) {
-    try {
-      const res = await fetch(webhookURL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ Token: value })
-      });
+                rescanBtn.style.display = "block";
 
-      const txt = await res.text();
+            } catch (e) {
+                statusBox.textContent = "❌ No hay conexión con el servidor";
+                statusBox.classList.add("error");
+                rescanBtn.style.display = "block";
+            }
+        }
 
-      if (res.ok) {
-        statusBox.textContent = "✔ " + txt;
-        statusBox.classList.add("success");
-        rescanBtn.style.display = "block";
-      } else {
-        statusBox.textContent = "❌ " + txt;
-        statusBox.classList.add("error");
-      }
+        rescanBtn.onclick = () => {
+            scanning = true;
+            statusBox.textContent = "Apuntá al código QR para validar";
+            statusBox.classList.remove("success", "error");
+            rescanBtn.style.display = "none";
+            decode();
+        };
 
-    } catch (e) {
-      statusBox.textContent = "❌ No se pudo conectar al servidor";
-      statusBox.classList.add("error");
-    }
-  }
-
-  // 🎥 Iniciar cámara
-  async function startCamera(index = 0) {
-    if (stream) stream.getTracks().forEach(t => t.stop());
-
-    currentCamera = index % cameras.length;
-    const cam = cameras[currentCamera];
-
-    stream = await navigator.mediaDevices.getUserMedia({
-      video: {
-        deviceId: cam.deviceId,
-        width: { ideal: 1280 },
-        height: { ideal: 720 }
-      }
-    });
-
-    video.srcObject = stream;
-
-    video.onloadeddata = () => {
-      scanning = true;
-      requestAnimationFrame(scanFrame);
-    };
-  }
-
-  // 📷 Cambiar cámara
-  switchBtn.onclick = () => {
-    if (cameras.length > 1) startCamera(currentCamera + 1);
-  };
-
-  // 🔁 Re-escanear
-  rescanBtn.onclick = () => {
-    rescanBtn.style.display = "none";
-    statusBox.classList.remove("success", "error");
-    statusBox.textContent = "Apuntá al código QR para validar";
-    scanning = true;
-    requestAnimationFrame(scanFrame);
-  };
-
-  // ▶ Iniciar app
-  (async () => {
-    const devs = await navigator.mediaDevices.enumerateDevices();
-    cameras = devs.filter(d => d.kind === "videoinput");
-
-    if (cameras.length > 1) switchBtn.style.display = "block";
-
-    await startCamera();
-  })();
-  </script>
+        startCamera();
+    </script>
 
 </body>
 </html>
