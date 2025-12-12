@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-    <title>Validador de Tickets v7</title>
+    <title>Validador de Tickets v8</title>
     <script src="https://unpkg.com/@zxing/library@0.20.0"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
     <style>
@@ -33,7 +33,7 @@
             box-shadow: 0 0 25px rgba(93, 63, 255, 0.5); transition: transform 0.2s;
         }
         #start-btn:active { transform: scale(0.95); }
-        #error-message { color: var(--error); margin-top: 20px; font-weight: 500; display: none; }
+        #error-message { color: var(--error); margin-top: 20px; font-weight: 500; display: none; max-width: 320px; }
 
         #scanner-view { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; }
         #video { width: 100%; height: 100%; object-fit: cover; }
@@ -72,7 +72,6 @@
         }
         #result-panel.visible { transform: translateY(0); }
         
-        #result-status, #result-data, #rescan-btn { /* Estilos sin cambios de v6 */ }
         #result-status { font-size: 1.4rem; font-weight: 700; margin: 0 0 15px 0; text-align: center; }
         #result-data { text-align: left; }
         #result-data p { margin: 5px 0; font-size: 1.1rem; color: #ccc; }
@@ -98,12 +97,27 @@
         <div id="scanner-view">
             <video id="video" autoplay playsinline></video>
             <div class="overlay">
-                <!-- ... (igual que v6) ... -->
+                <div class="scan-region">
+                    <div class="scan-box"><div class="scan-line"></div></div>
+                </div>
+                <div class="bottom-panel">
+                    <div class="controls">
+                        <button id="flash-btn" class="control-btn"><svg viewBox="0 0 24 24"><path d="M13 3h-2v10h2V3zm4.12 2.46l-1.42 1.42A6.995 6.995 0 0 0 12 5c-3.87 0-7 3.13-7 7s3.13 7 7 7a6.995 6.995 0 0 0 4.58-1.88l1.42 1.42A8.962 8.962 0 0 1 12 21a9 9 0 1 1 9-9c0 1.93-.63 3.68-1.66 5.12l-1.42-1.42A6.953 6.953 0 0 0 19 12c0-2.43-1.23-4.57-3.12-5.88z"/></svg></button>
+                        <button id="switch-cam-btn" class="control-btn"><svg viewBox="0 0 24 24"><path d="M9.83 2.17 7.41 4.59 9.83 7l-1.42 1.41L6 6l-2.41 2.41L2.17 7 4.59 4.59 2.17 2.17 3.59 0.76l6.24 6.24zM12 4c-3.87 0-7 3.13-7 7s3.13 7 7 7 7-3.13 7-7-3.13-7-7-7zm0 12c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5z"/><path d="m20.41 15.59-2.42-2.42L20.41 10.75l-1.41-1.41L16.59 11.75l-2.41-2.41-1.41 1.41L15.17 13.17l-2.41 2.41 1.41 1.41L16.59 14.59l2.41 2.41z"/></svg></button>
+                    </div>
+                    <div id="result-panel">
+                        <h3 id="result-status"></h3>
+                        <div id="result-data"></div>
+                        <button id="rescan-btn">Escanear Otro</button>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
     
-    <!-- ... (audios igual que v6) ... -->
+    <audio id="audio-success" src="https://cdn.pixabay.com/audio/2022/03/15/audio_2b28b1a50b.mp3" preload="auto"></audio>
+    <audio id="audio-error" src="https://cdn.pixabay.com/audio/2021/08/04/audio_c6ccf34812.mp3" preload="auto"></audio>
+    <audio id="audio-warning" src="https://cdn.pixabay.com/audio/2022/10/19/audio_2c5a2c416c.mp3" preload="auto"></audio>
     
     <script>
         const WEBHOOK_URL = "https://garatt10.app.n8n.cloud/webhook-test/752561a4-b0f1-4dde-9b89-e751f818313b";
@@ -129,62 +143,62 @@
         function displayError(message) {
             errorMessage.textContent = message;
             errorMessage.style.display = 'block';
-            startScreen.style.display = 'flex';
-            scannerView.style.display = 'none';
         }
 
         async function initScanner() {
             errorMessage.style.display = 'none';
 
             if (location.protocol !== 'https:') {
-                displayError('Error: La página debe usar una conexión segura (HTTPS).');
+                displayError('Error: Esta página debe usar una conexión segura (HTTPS).');
                 return;
             }
 
             app.isScanning = true;
             try {
-                await startCamera();
+                // 1. Pedir permiso y obtener el stream de video
+                const constraints = { video: { facingMode: { ideal: 'environment' } } };
+                app.stream = await navigator.mediaDevices.getUserMedia(constraints);
+                video.srcObject = app.stream;
+                
                 startScreen.style.display = 'none';
                 scannerView.style.display = 'block';
+                
+                // 2. Ahora que tenemos permiso, habilitar los controles avanzados
+                await enableAdvancedControls();
+
+                // 3. Iniciar el bucle de decodificación
                 decodeFromStream();
             } catch (err) {
-                console.error("Error al iniciar cámara:", err.name, err.message);
+                console.error("ERROR AL INICIAR CÁMARA:", err);
                 if (err.name === 'NotAllowedError') {
                     displayError('Permiso denegado. Revisa los permisos de la cámara para este sitio en los ajustes de tu navegador.');
-                } else if (err.name === 'NotFoundError') {
+                } else if (err.name === 'NotFoundError' || err.name === 'OverconstrainedError') {
                     displayError('No se encontró una cámara compatible en tu dispositivo.');
                 } else {
-                    displayError(`Error de cámara: ${err.name}. Asegúrate de usar HTTPS.`);
+                    displayError(`Error de cámara: ${err.name}. Asegúrate de usar HTTPS y que ninguna otra app esté usando la cámara.`);
                 }
             }
         }
         
-        async function startCamera() {
-            // Detiene cualquier stream anterior para evitar conflictos
-            if (app.stream) {
-                app.stream.getTracks().forEach(track => track.stop());
-            }
+        async function enableAdvancedControls() {
+             if (!app.stream) return;
+            try {
+                app.videoDevices = await ZXing.BrowserCodeReader.listVideoInputDevices();
+                if (app.videoDevices.length > 1) {
+                    switchCamBtn.style.display = 'flex';
+                    const currentTrack = app.stream.getVideoTracks()[0];
+                    app.currentDeviceIndex = app.videoDevices.findIndex(d => d.label === currentTrack.label);
+                }
 
-            // Intenta obtener la cámara trasera primero
-            const constraints = { video: { facingMode: { ideal: 'environment' } } };
-            app.stream = await navigator.mediaDevices.getUserMedia(constraints);
-            video.srcObject = app.stream;
-            
-            // Una vez que la cámara funciona, lista los dispositivos para el botón de cambio
-            app.videoDevices = await ZXing.BrowserCodeReader.listVideoInputDevices();
-            if (app.videoDevices.length > 1) {
-                switchCamBtn.style.display = 'flex';
-                // Encuentra el índice del dispositivo actual para cambiar correctamente
-                const currentTrack = app.stream.getVideoTracks()[0];
-                app.currentDeviceIndex = app.videoDevices.findIndex(device => device.label === currentTrack.label);
+                const track = app.stream.getVideoTracks()[0];
+                const capabilities = track.getCapabilities();
+                if (capabilities.torch) {
+                    flashBtn.style.display = 'flex';
+                }
+            } catch (err) {
+                console.warn("No se pudieron habilitar los controles avanzados:", err);
             }
-
-            const track = app.stream.getVideoTracks()[0];
-            const capabilities = track.getCapabilities();
-            if (capabilities.torch) flashBtn.style.display = 'flex';
         }
-
-        // --- El resto de funciones (decodeFromStream, sendToWebhook, parseResponse, etc.) son idénticas a la v6 ---
 
         async function decodeFromStream() {
              while (app.isScanning) {
@@ -195,7 +209,9 @@
                         await sendToWebhook(result.getText());
                     }
                 } catch (error) {
-                    if (!(error instanceof ZXing.NotFoundException)) console.error("Error de decodificación:", error);
+                    if (!(error instanceof ZXing.NotFoundException)) {
+                        console.error("Error de decodificación:", error);
+                    }
                 }
             }
         }
@@ -233,7 +249,8 @@
         }
         
         function showResult(type, message, data = null) {
-            resultStatus.textContent = message; resultStatus.className = type;
+            resultStatus.textContent = message;
+            resultStatus.className = type;
             let html = '';
             if (data) {
                 if (data.nombre) html += `<p><strong>Nombre:</strong> ${escapeHTML(data.nombre)} ${escapeHTML(data.apellido || '')}</p>`;
@@ -250,23 +267,47 @@
             decodeFromStream();
         }
 
-        function triggerFeedback(type) { /* ... sin cambios ... */ }
-        function escapeHTML(str) { /* ... sin cambios ... */ }
+        function triggerFeedback(type) {
+            try {
+                const audio = document.getElementById(`audio-${type}`);
+                if (audio) audio.play();
+            } catch(e) {}
+            const vibrations = { success: [150], error: [70, 50, 70], warning: [100, 60] };
+            if (vibrations[type]) navigator.vibrate?.(vibrations[type]);
+        }
+
+        function escapeHTML(str) { return str.replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
 
         async function switchCamera() {
             if (app.videoDevices.length <= 1) return;
+            app.isScanning = false;
+            
             app.currentDeviceIndex = (app.currentDeviceIndex + 1) % app.videoDevices.length;
             const deviceId = app.videoDevices[app.currentDeviceIndex].deviceId;
 
+            if(app.stream) app.stream.getTracks().forEach(track => track.stop());
             app.codeReader.reset();
-            app.stream.getTracks().forEach(track => track.stop());
 
-            const newConstraints = { video: { deviceId: { exact: deviceId } } };
-            app.stream = await navigator.mediaDevices.getUserMedia(newConstraints);
-            video.srcObject = app.stream;
+            try {
+                const newConstraints = { video: { deviceId: { exact: deviceId } } };
+                app.stream = await navigator.mediaDevices.getUserMedia(newConstraints);
+                video.srcObject = app.stream;
+                app.isScanning = true;
+                decodeFromStream();
+            } catch (err) {
+                displayError(`Error al cambiar de cámara: ${err.name}`);
+            }
         }
         
-        async function toggleFlash() { /* ... sin cambios ... */ }
+        async function toggleFlash() {
+            if (!app.stream) return;
+            const track = app.stream.getVideoTracks()[0];
+            try {
+                await track.applyConstraints({ advanced: [{ torch: !app.isTorchOn }] });
+                app.isTorchOn = !app.isTorchOn;
+                flashBtn.classList.toggle('active', app.isTorchOn);
+            } catch (err) { console.warn("Linterna no soportada."); }
+        }
 
         startBtn.addEventListener('click', initScanner);
         rescanBtn.addEventListener('click', resetScanner);
